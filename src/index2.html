@@ -11,69 +11,64 @@
 
     <div class="max-w-6xl mx-auto">
         <header class="mb-12">
-            <h1 class="text-4xl font-800 text-slate-900 tracking-tight">Alicante Trip Hub</h1>
-            <p id="status-text" class="text-slate-500 mt-2 italic text-lg">Scanning for your itineraries...</p>
+            <h1 class="text-4xl font-800 text-slate-900 tracking-tight text-center md:text-left">Alicante Trip Hub</h1>
+            <p id="status-text" class="text-slate-500 mt-2 italic text-lg text-center md:text-left">Opening your itineraries...</p>
         </header>
 
         <div id="file-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <!-- Cards will appear here -->
         </div>
 
-        <!-- Visibility Scanner (Helpful Debugging) -->
-        <div class="mt-20 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
-            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Repository Scanner (Debug)</h3>
-            <ul id="debug-file-list" class="text-xs font-mono text-slate-600 space-y-1">
-                <li>Scanning...</li>
-            </ul>
+        <!-- Debugging section (can be removed once working) -->
+        <div class="mt-20 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm opacity-50">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Folder Scanner</h3>
+            <p id="debug-path" class="text-[10px] font-mono text-slate-500 mb-2"></p>
+            <ul id="debug-file-list" class="text-[10px] font-mono text-slate-400 space-y-1"></ul>
         </div>
     </div>
 
 <script>
     // --- 1. CONFIGURATION ---
     const CONFIG = {
-        username: 'toinevl', 
-        repo: 'alicante-static'
+        username: 'YOUR_GITHUB_USERNAME', 
+        repo: 'YOUR_REPO_NAME',
+        folder: 'src' // We are now looking inside your 'src' folder
     };
 
     async function scanRepository() {
         const grid = document.getElementById('file-grid');
         const debugList = document.getElementById('debug-file-list');
         const statusText = document.getElementById('status-text');
+        const pathText = document.getElementById('debug-path');
+
+        const apiUrl = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${CONFIG.folder}`;
+        pathText.innerText = `Searching in: /${CONFIG.folder}`;
 
         try {
-            const url = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/`;
-            const response = await fetch(url);
+            const response = await fetch(apiUrl);
             
             if (!response.ok) {
-                statusText.innerText = "Error: Could not access GitHub.";
-                debugList.innerHTML = `<li>❌ API Error: ${response.status}</li><li>Make sure the repo is PUBLIC.</li>`;
+                statusText.innerText = `Error: Folder '/${CONFIG.folder}' not found.`;
                 return;
             }
 
             const files = await response.json();
-            debugList.innerHTML = ''; // Clear scanning text
+            debugList.innerHTML = ''; 
 
-            // Filter for HTML
-            const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html') && f.name !== 'index.html');
+            // Filter for HTML files
+            const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html'));
 
             if (htmlFiles.length === 0) {
-                statusText.innerText = "No itinerary files found.";
-                debugList.innerHTML = `<li>Found ${files.length} total files, but zero .html files.</li>`;
-                // List everything found so the user can see what the API sees
-                files.forEach(f => {
-                    debugList.innerHTML += `<li>📁 Found: ${f.name}</li>`;
-                });
+                statusText.innerText = `No .html files found in /${CONFIG.folder}`;
+                files.forEach(f => debugList.innerHTML += `<li>📁 ${f.name}</li>`);
             } else {
-                statusText.innerText = `Found ${htmlFiles.length} itineraries.`;
+                statusText.innerText = `Found ${htmlFiles.length} itineraries in /${CONFIG.folder}`;
                 renderCards(htmlFiles);
-                htmlFiles.forEach(f => {
-                    debugList.innerHTML += `<li>✅ Displaying: ${f.name}</li>`;
-                });
             }
 
         } catch (e) {
             statusText.innerText = "Connection failed.";
-            debugList.innerHTML = `<li>Error: ${e.message}</li>`;
+            console.error(e);
         }
     }
 
@@ -88,6 +83,10 @@
 
         files.forEach((file, i) => {
             const friendlyName = file.name.replace('.html', '').replace(/_/g, ' ').replace(/-/g, ' ');
+            
+            // IMPORTANT: Since the files are in 'src/', the link must include 'src/'
+            const filePath = `${CONFIG.folder}/${file.name}`;
+
             const card = document.createElement('div');
             card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1';
             card.innerHTML = `
@@ -96,8 +95,8 @@
                 </div>
                 <div class="p-6">
                     <h2 class="text-xl font-bold text-slate-900 capitalize mb-1">${friendlyName}</h2>
-                    <p class="text-slate-400 text-xs mb-4">Itinerary File: ${file.name}</p>
-                    <a href="${file.name}" class="block w-full bg-blue-600 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition">View Map</a>
+                    <p class="text-slate-400 text-[10px] mb-4 uppercase tracking-widest font-bold">Costa Blanca Route</p>
+                    <a href="${filePath}" class="block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">View 3D Map</a>
                 </div>
             `;
             grid.appendChild(card);
