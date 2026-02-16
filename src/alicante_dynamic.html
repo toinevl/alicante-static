@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Alicante Explorer</title>
+    
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #020617; margin: 0; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .sidebar {
+            position: absolute; top: 20px; left: 20px; width: 420px;
+            z-index: 100; border-radius: 24px;
+            display: flex; flex-direction: column; max-height: 94vh;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .active-tab { border-bottom: 3px solid #3b82f6; color: #3b82f6; }
+        
+        .marker {
+            width: 14px; height: 14px; background: #3b82f6;
+            border: 3px solid white; border-radius: 50%;
+            cursor: pointer; box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar glass overflow-hidden flex flex-col">
+    <!-- Header/Tabs -->
+    <div class="p-6 bg-slate-900 text-white">
+        <h1 class="text-xl font-800 tracking-tight">Trip Planner</h1>
+        <div class="flex gap-6 mt-4 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <button id="tab-explore" onclick="switchTab('explore')" class="pb-2 active-tab">Explore</button>
+            <button id="tab-edit" onclick="switchTab('edit')" class="pb-2">Manage Plan</button>
+        </div>
+    </div>
+
+    <!-- TAB 1: EXPLORE VIEW -->
+    <div id="view-explore" class="overflow-y-auto custom-scrollbar flex-grow p-4 space-y-3">
+        <!-- List of cards will appear here -->
+    </div>
+
+    <!-- TAB 2: EDITOR VIEW -->
+    <div id="view-edit" class="hidden overflow-y-auto custom-scrollbar flex-grow p-6">
+        <h3 class="text-sm font-bold text-slate-800 mb-4 uppercase">Add New Destination</h3>
+        <div class="space-y-3 mb-8 bg-white/50 p-4 rounded-xl border border-slate-200">
+            <div class="grid grid-cols-2 gap-2">
+                <input id="in-day" type="number" placeholder="Day" class="p-2 text-sm border rounded-lg">
+                <input id="in-place" type="text" placeholder="Place Name" class="p-2 text-sm border rounded-lg">
+            </div>
+            <input id="in-vibe" type="text" placeholder="Vibe (Short description)" class="p-2 text-sm border rounded-lg w-full">
+            <div class="grid grid-cols-2 gap-2">
+                <input id="in-lng" type="text" placeholder="Lng (Click map)" class="p-2 text-xs border rounded-lg bg-slate-50">
+                <input id="in-lat" type="text" placeholder="Lat (Click map)" class="p-2 text-xs border rounded-lg bg-slate-50">
+            </div>
+            <textarea id="in-food" placeholder="Food tips..." class="p-2 text-sm border rounded-lg w-full h-16"></textarea>
+            <textarea id="in-scenery" placeholder="Scenery tips..." class="p-2 text-sm border rounded-lg w-full h-16"></textarea>
+            <button onclick="addPoint()" class="w-full bg-blue-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-blue-700">Add to Itinerary</button>
+            <p class="text-[10px] text-slate-400 text-center italic">Tip: Click the map to fill Lng/Lat automatically</p>
+        </div>
+
+        <h3 class="text-sm font-bold text-slate-800 mb-4 uppercase">Current Itinerary</h3>
+        <div id="editor-list" class="space-y-2">
+            <!-- Management items injected here -->
+        </div>
+        
+        <button onclick="resetToDefault()" class="mt-8 text-xs text-red-500 font-bold hover:underline">Reset to Default Alicante List</button>
+    </div>
+
+    <!-- Footer Controls -->
+    <div class="p-4 bg-white/50 border-t flex justify-between items-center">
+        <button onclick="resetMap()" class="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-600">Center Map</button>
+        <span class="text-[9px] text-slate-400 uppercase tracking-widest">Local Storage Enabled</span>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    // --- Initial Data ---
+    const defaultData = [
+        { day: 1, place: "Alicante City", vibe: "Old town, castle, tapas", food: "Arroz a banda at El Portal", scenery: "Santa Barbara Castle sunset", lng: -0.4815, lat: 38.3452 },
+        { day: 2, place: "Altea", vibe: "White-washed town", food: "Fresh seafood at Oustau", scenery: "The Blue Dome Church", lng: -0.0514, lat: 38.5990 },
+        { day: 3, place: "Calpe", vibe: "Rock of Ifach hike", food: "Pescado a la sal", scenery: "Peñón de Ifach summit", lng: 0.0457, lat: 38.6436 }
+    ];
+
+    let destinations = JSON.parse(localStorage.getItem('my_alicante_trip')) || defaultData;
+    let markers = [];
+
+    // --- Initialize Map ---
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/bright',
+        center: [-0.4, 38.4],
+        zoom: 9,
+        pitch: 45
+    });
+
+    // --- Functions ---
+
+    function switchTab(tab) {
+        document.getElementById('view-explore').classList.toggle('hidden', tab !== 'explore');
+        document.getElementById('view-edit').classList.toggle('hidden', tab !== 'edit');
+        document.getElementById('tab-explore').classList.toggle('active-tab', tab === 'explore');
+        document.getElementById('tab-edit').classList.toggle('active-tab', tab === 'edit');
+        renderUI();
+    }
+
+    function renderUI() {
+        // Sort destinations by Day
+        destinations.sort((a, b) => a.day - b.day);
+        localStorage.setItem('my_alicante_trip', JSON.stringify(destinations));
+
+        // Clear Map Markers
+        markers.forEach(m => m.remove());
+        markers = [];
+
+        // Clear Lists
+        const exploreList = document.getElementById('view-explore');
+        const editorList = document.getElementById('editor-list');
+        exploreList.innerHTML = '';
+        editorList.innerHTML = '';
+
+        destinations.forEach((dest, index) => {
+            // Add Map Marker
+            const el = document.createElement('div');
+            el.className = 'marker';
+            const marker = new maplibregl.Marker(el)
+                .setLngLat([dest.lng, dest.lat])
+                .setPopup(new maplibregl.Popup({ offset: 15 }).setHTML(`
+                    <div class="p-2">
+                        <h4 class="font-bold text-sm">Day ${dest.day}: ${dest.place}</h4>
+                        <p class="text-xs text-slate-600">${dest.vibe}</p>
+                    </div>
+                `))
+                .addTo(map);
+            markers.push(marker);
+
+            // Add Explore Card
+            const card = document.createElement('div');
+            card.className = 'bg-white/70 p-4 rounded-2xl border border-transparent hover:border-blue-300 cursor-pointer transition shadow-sm';
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="text-[10px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full">DAY ${dest.day}</span>
+                        <h3 class="font-bold text-slate-800 mt-2">${dest.place}</h3>
+                        <p class="text-xs text-slate-500">${dest.vibe}</p>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                    <p class="text-[11px] text-slate-600"><strong>🍴 Eat:</strong> ${dest.food}</p>
+                    <p class="text-[11px] text-slate-600"><strong>📸 See:</strong> ${dest.scenery}</p>
+                </div>
+            `;
+            card.onclick = () => {
+                map.flyTo({ center: [dest.lng, dest.lat], zoom: 14, pitch: 60, essential: true });
+                marker.togglePopup();
+            };
+            exploreList.appendChild(card);
+
+            // Add Editor Item
+            const editItem = document.createElement('div');
+            editItem.className = 'flex justify-between items-center p-3 bg-white rounded-lg border text-sm';
+            editItem.innerHTML = `
+                <span class="font-bold text-slate-700">D${dest.day}: ${dest.place}</span>
+                <button onclick="deletePoint(${index})" class="text-red-500 hover:bg-red-50 rounded p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+            `;
+            editorList.appendChild(editItem);
+        });
+    }
+
+    function addPoint() {
+        const day = document.getElementById('in-day').value;
+        const place = document.getElementById('in-place').value;
+        const lng = parseFloat(document.getElementById('in-lng').value);
+        const lat = parseFloat(document.getElementById('in-lat').value);
+        
+        if(!day || !place || isNaN(lng)) return alert("Please fill at least Day, Place and Location");
+
+        destinations.push({
+            day: parseInt(day),
+            place: place,
+            vibe: document.getElementById('in-vibe').value || "A beautiful stop",
+            food: document.getElementById('in-food').value || "Local Mediterranean cuisine",
+            scenery: document.getElementById('in-scenery').value || "Scenic vistas",
+            lng: lng,
+            lat: lat
+        });
+
+        // Clear inputs
+        ['in-day', 'in-place', 'in-vibe', 'in-lng', 'in-lat', 'in-food', 'in-scenery'].forEach(id => document.getElementById(id).value = '');
+        
+        renderUI();
+    }
+
+    function deletePoint(index) {
+        if(confirm("Delete this destination?")) {
+            destinations.splice(index, 1);
+            renderUI();
+        }
+    }
+
+    function resetToDefault() {
+        if(confirm("This will erase all your custom points. Reset to default?")) {
+            destinations = [...defaultData];
+            renderUI();
+        }
+    }
+
+    function resetMap() {
+        map.flyTo({ center: [-0.4, 38.4], zoom: 9, pitch: 45, bearing: 0 });
+    }
+
+    // Capture coordinates on map click to help user
+    map.on('click', (e) => {
+        document.getElementById('in-lng').value = e.lngLat.lng.toFixed(5);
+        document.getElementById('in-lat').value = e.lngLat.lat.toFixed(5);
+        
+        // Visual feedback
+        new maplibregl.Popup({ offset: 10 })
+            .setLngLat(e.lngLat)
+            .setHTML(`<span class="text-[10px] font-bold uppercase">Coords Picked!</span>`)
+            .addTo(map);
+    });
+
+    map.on('load', renderUI);
+
+</script>
+
+</body>
+</html>
