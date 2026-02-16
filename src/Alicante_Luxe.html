@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Costa Blanca 3D Explorer</title>
+    
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #020617; margin: 0; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .sidebar {
+            position: absolute; top: 20px; left: 20px; width: 400px;
+            z-index: 100; border-radius: 24px;
+            display: flex; flex-direction: column; max-height: 92vh;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .location-card {
+            cursor: pointer; transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        .location-card:hover { transform: translateY(-2px); background: white; border-color: #e2e8f0; }
+        .active-location { background: white; border-color: #3b82f6; box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+
+        .marker {
+            width: 12px; height: 12px; background: #3b82f6;
+            border: 3px solid white; border-radius: 50%;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+            cursor: pointer; transition: all 0.3s ease;
+        }
+        .marker:hover { transform: scale(1.5); background: #ef4444; }
+
+        #detail-view { display: none; }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="sidebar glass shadow-2xl overflow-hidden">
+    <!-- Header -->
+    <div class="p-6 bg-slate-900 text-white">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-800 tracking-tight">Alicante Luxe</h1>
+                <p class="text-slate-400 text-[10px] uppercase tracking-[0.2em]">Rental Car Expedition</p>
+            </div>
+            <button onclick="resetView()" class="p-2 hover:bg-slate-800 rounded-full transition">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main List View -->
+    <div id="list-view" class="overflow-y-auto custom-scrollbar p-4 space-y-3">
+        <!-- Cards Injected Here -->
+    </div>
+
+    <!-- Detail View (Initially Hidden) -->
+    <div id="detail-view" class="overflow-y-auto custom-scrollbar flex-grow fade-in">
+        <button onclick="showList()" class="m-4 flex items-center text-xs font-bold text-blue-600 uppercase tracking-widest">
+            ← Back to Itinerary
+        </button>
+        <img id="detail-img" src="" class="w-full h-48 object-cover px-4 rounded-[32px]" onerror="this.src='https://images.unsplash.com/photo-1505761671935-60b3a7427bad?w=800'">
+        <div class="p-6">
+            <h2 id="detail-title" class="text-2xl font-800 text-slate-900 mb-2"></h2>
+            
+            <div class="space-y-6">
+                <section>
+                    <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900 mb-2 uppercase tracking-tighter">
+                        <span class="p-1.5 bg-orange-100 text-orange-600 rounded-lg">🍴</span> The Plate
+                    </h3>
+                    <p id="detail-food" class="text-sm text-slate-600 leading-relaxed"></p>
+                </section>
+
+                <section>
+                    <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900 mb-2 uppercase tracking-tighter">
+                        <span class="p-1.5 bg-blue-100 text-blue-600 rounded-lg">📸</span> The View
+                    </h3>
+                    <p id="detail-view-text" class="text-sm text-slate-600 leading-relaxed"></p>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    const destinations = [
+        {
+            day: 1, place: "Alicante City",
+            coords: [-0.4815, 38.3452],
+            img: "https://images.unsplash.com/photo-1570530752494-0a30b5015a97?w=800",
+            food: "Go to 'El Portal' for high-end tapas. You must try 'Arroz a banda' (traditional fisherman's rice) and local salted fish (salazones).",
+            scenery: "Walk the Explanada de España with its 6 million marble tiles. Sunset from Santa Bárbara Castle offers a 360° view of the coast.",
+            pitch: 60, bearing: -20
+        },
+        {
+            day: 2, place: "Altea",
+            coords: [-0.0514, 38.5990],
+            img: "https://images.unsplash.com/photo-1523544545175-92e04b96dcef?w=800",
+            food: "Dine at 'Oustau' in the old town. Fresh Mediterranean seafood and local white wines (Marina Alta) are the highlights here.",
+            scenery: "The iconic blue-domed church (Nuestra Señora del Consuelo). Wander the labyrinth of white-washed streets for artisan boutiques.",
+            pitch: 50, bearing: 45
+        },
+        {
+            day: 3, place: "Calpe",
+            coords: [0.0457, 38.6436],
+            img: "https://images.unsplash.com/photo-1544971587-b842c27f8e14?w=800",
+            food: "The harbor is famous for its fish auctions. Eat at the 'Baños de la Reina' area for fresh grilled prawns (Gambas de Denia).",
+            scenery: "The Peñón de Ifach is a giant limestone rock. Hike to the top for views of Ibiza on clear days. Also check the pink flamingos at the salt flats.",
+            pitch: 65, bearing: 10
+        },
+        {
+            day: 4, place: "Guadalest",
+            coords: [-0.1981, 38.6766],
+            img: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=800",
+            food: "Traditional mountain cuisine. Try 'Olleta' (a rich mountain stew) and local honey or almond-based sweets.",
+            scenery: "A village carved into the rock. The view from the castle over the turquoise reservoir is the most photographed spot in the region.",
+            pitch: 70, bearing: -40
+        },
+        {
+            day: 5, place: "Villajoyosa",
+            coords: [-0.2319, 38.5081],
+            img: "https://images.unsplash.com/photo-1560935105-905c74266133?w=800",
+            food: "Home to 'Valor' chocolate. Visit the chocolate museum and have churros. For lunch, 'La Cuina' serves incredible rice dishes.",
+            scenery: "The 'Casas Pintadas' (painted houses) along the riverfront. Fishermen painted them bright colors so they could see home from the sea.",
+            pitch: 45, bearing: 20
+        },
+        {
+            day: 6, place: "Elche / Santa Pola",
+            coords: [-0.6931, 38.2672],
+            img: "https://images.unsplash.com/photo-1596395817234-a82f32386da6?w=800",
+            food: "Try 'Arroz con costra' (rice with an egg crust) and 'Datiles' (dates) from the local palms wrapped in bacon.",
+            scenery: "The Palmeral of Elche (UNESCO site) with over 200,000 palm trees. Visit the 'Huerto del Cura' for rare botanical species.",
+            pitch: 40, bearing: 0
+        },
+        {
+            day: 7, place: "Javea / Denia",
+            coords: [0.1661, 38.7892],
+            img: "https://images.unsplash.com/photo-1527453051474-06c8b9821890?w=800",
+            food: "Denia is a UNESCO City of Gastronomy. Quique Dacosta (3 Michelin stars) is here, but seaside 'Chiringuitos' offer world-class paella too.",
+            scenery: "Cabo de la Nao and Cala Granadella. The cliffs here are dramatic, with secret sea caves and crystal clear snorkeling waters.",
+            pitch: 55, bearing: -30
+        }
+    ];
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/bright',
+        center: [-0.1, 38.55],
+        zoom: 9,
+        pitch: 45,
+        antialias: true
+    });
+
+    function showDetail(dest) {
+        document.getElementById('list-view').style.display = 'none';
+        document.getElementById('detail-view').style.display = 'block';
+        
+        document.getElementById('detail-img').src = dest.img;
+        document.getElementById('detail-title').innerText = dest.place;
+        document.getElementById('detail-food').innerText = dest.food;
+        document.getElementById('detail-view-text').innerText = dest.scenery;
+
+        map.flyTo({
+            center: dest.coords,
+            zoom: 15,
+            pitch: dest.pitch,
+            bearing: dest.bearing,
+            speed: 1.2,
+            essential: true
+        });
+    }
+
+    function showList() {
+        document.getElementById('list-view').style.display = 'block';
+        document.getElementById('detail-view').style.display = 'none';
+        resetView();
+    }
+
+    function resetView() {
+        map.flyTo({ center: [-0.1, 38.55], zoom: 9, pitch: 45, bearing: 0, essential: true });
+    }
+
+    map.on('load', () => {
+        destinations.forEach((dest) => {
+            // Sidebar Card
+            const card = document.createElement('div');
+            card.className = 'location-card p-4 rounded-2xl flex gap-4 items-center';
+            card.innerHTML = `
+                <div class="relative">
+                    <img src="${dest.img}" class="w-16 h-16 rounded-xl object-cover" onerror="this.src='https://images.unsplash.com/photo-1505761671935-60b3a7427bad?w=200'">
+                    <span class="absolute -top-2 -left-2 bg-blue-600 text-white text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white">${dest.day}</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800">${dest.place}</h3>
+                    <p class="text-xs text-slate-500 line-clamp-1 italic font-medium">Click to explore details</p>
+                </div>
+            `;
+            card.onclick = () => showDetail(dest);
+            document.getElementById('list-view').appendChild(card);
+
+            // Map Marker
+            const el = document.createElement('div');
+            el.className = 'marker';
+            new maplibregl.Marker(el)
+                .setLngLat(dest.coords)
+                .setPopup(new maplibregl.Popup({ offset: 15 }).setHTML(`<h4 class="font-bold">${dest.place}</h4>`))
+                .addTo(map);
+        });
+
+        // Add 3D Building Layer
+        map.addLayer({
+            'id': '3d-buildings',
+            'source': 'openmaptiles',
+            'source-layer': 'building',
+            'type': 'fill-extrusion',
+            'minzoom': 13,
+            'paint': {
+                'fill-extrusion-color': '#fff',
+                'fill-extrusion-height': ['get', 'render_height'],
+                'fill-extrusion-opacity': 0.7
+            }
+        });
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+</script>
+
+</body>
+</html>
