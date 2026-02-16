@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alicante Trip Hub - 2</title>
+    <title>Alicante Trip Hub - 3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
 </head>
@@ -11,15 +11,16 @@
 
     <div class="max-w-6xl mx-auto">
         <header class="mb-12">
-            <h1 class="text-4xl font-800 text-slate-900 tracking-tight text-center md:text-left">Alicante Trip Hub</h1>
-            <p id="status-text" class="text-slate-500 mt-2 italic text-lg text-center md:text-left">Opening your itineraries...</p>
+            <h1 class="text-4xl font-800 text-slate-900 tracking-tight">Alicante Trip Hub</h1>
+            <p id="status-text" class="text-slate-500 mt-2 italic text-lg text-center md:text-left">Finding your itineraries...</p>
         </header>
 
         <div id="file-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <!-- Cards will appear here -->
         </div>
 
-
+        <!-- Debugging (Hidden by default, check console if issues persist) -->
+        <div id="debug-info" class="hidden mt-20 p-4 border-t border-slate-200 text-[10px] font-mono text-slate-400"></div>
     </div>
 
 <script>
@@ -27,42 +28,35 @@
     const CONFIG = {
         username: 'toinevl', 
         repo: 'alicante-static',
-        folder: 'src' // We are now looking inside your 'src' folder
+        githubFolder: 'src' // Where the files live on GitHub
     };
 
     async function scanRepository() {
         const grid = document.getElementById('file-grid');
-        const debugList = document.getElementById('debug-file-list');
         const statusText = document.getElementById('status-text');
-        const pathText = document.getElementById('debug-path');
+        const debug = document.getElementById('debug-info');
 
-        const apiUrl = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${CONFIG.folder}`;
-        pathText.innerText = `Searching in: /${CONFIG.folder}`;
+        // We ask GitHub to look in the /src folder
+        const apiUrl = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${CONFIG.githubFolder}`;
 
         try {
             const response = await fetch(apiUrl);
-            
-            if (!response.ok) {
-                statusText.innerText = `Error: Folder '/${CONFIG.folder}' not found.`;
-                return;
-            }
+            if (!response.ok) throw new Error("Folder not found");
 
             const files = await response.json();
-            debugList.innerHTML = ''; 
-
+            
             // Filter for HTML files
-            const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html'));
+            const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html') && f.name !== 'index.html');
 
             if (htmlFiles.length === 0) {
-                statusText.innerText = `No .html files found in /${CONFIG.folder}`;
-                files.forEach(f => debugList.innerHTML += `<li>📁 ${f.name}</li>`);
+                statusText.innerText = "No itineraries found in /src.";
             } else {
-                statusText.innerText = `Found ${htmlFiles.length} itineraries in /${CONFIG.folder}`;
+                statusText.innerText = `Ready to explore ${htmlFiles.length} routes.`;
                 renderCards(htmlFiles);
             }
 
         } catch (e) {
-            statusText.innerText = "Connection failed.";
+            statusText.innerText = "Error connecting to the Hub.";
             console.error(e);
         }
     }
@@ -77,21 +71,25 @@
         ];
 
         files.forEach((file, i) => {
+            // Friendly Name: "alicante_south.html" -> "Alicante South"
             const friendlyName = file.name.replace('.html', '').replace(/_/g, ' ').replace(/-/g, ' ');
             
-            // IMPORTANT: Since the files are in 'src/', the link must include 'src/'
-            const filePath = `${CONFIG.folder}/${file.name}`;
+            // URL LOGIC:
+            // Since Azure flattens the site, we link to just "file.name" (at the root)
+            const webPath = file.name;
 
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1';
+            card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex flex-col';
             card.innerHTML = `
-                <div class="h-40 bg-slate-200">
+                <div class="h-44 bg-slate-200">
                     <img src="https://images.unsplash.com/${images[i % images.length]}?w=600&q=80" class="w-full h-full object-cover">
                 </div>
-                <div class="p-6">
+                <div class="p-6 flex-grow flex flex-col">
                     <h2 class="text-xl font-bold text-slate-900 capitalize mb-1">${friendlyName}</h2>
-                    <p class="text-slate-400 text-[10px] mb-4 uppercase tracking-widest font-bold">Costa Blanca Route</p>
-                    <a href="${filePath}" class="block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">View 3D Map</a>
+                    <p class="text-slate-400 text-[11px] mb-6 uppercase font-bold tracking-widest">Costa Blanca Explorer</p>
+                    <a href="${webPath}" class="mt-auto block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">
+                        Launch Map
+                    </a>
                 </div>
             `;
             grid.appendChild(card);
