@@ -6,118 +6,105 @@
     <title>Alicante Trip Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
-        .hub-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .hub-card:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
-    </style>
 </head>
-<body class="p-8 md:p-16">
+<body class="p-8 md:p-16 bg-slate-50">
 
     <div class="max-w-6xl mx-auto">
         <header class="mb-12">
             <h1 class="text-4xl font-800 text-slate-900 tracking-tight">Alicante Trip Hub</h1>
-            <p class="text-slate-500 mt-2 italic text-lg">Select an itinerary to begin your journey.</p>
+            <p id="status-text" class="text-slate-500 mt-2 italic text-lg">Scanning for your itineraries...</p>
         </header>
 
         <div id="file-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <!-- Dynamic cards appear here -->
+            <!-- Cards will appear here -->
         </div>
 
-        <!-- Debugging Info (Hidden by default) -->
-        <div id="error-box" class="hidden mt-10 p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700">
-            <h3 class="font-bold mb-2">Connection Error</h3>
-            <p id="error-msg" class="text-sm mb-4"></p>
-            <div class="text-xs bg-white p-3 rounded border border-red-100 font-mono" id="debug-details"></div>
+        <!-- Visibility Scanner (Helpful Debugging) -->
+        <div class="mt-20 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Repository Scanner (Debug)</h3>
+            <ul id="debug-file-list" class="text-xs font-mono text-slate-600 space-y-1">
+                <li>Scanning...</li>
+            </ul>
         </div>
     </div>
 
 <script>
     // --- 1. CONFIGURATION ---
     const CONFIG = {
-        username: 'toinevl', // e.g., 'john-doe'
-        repo: 'alicante-static',           // e.g., 'alicante-holiday'
-        // SET TO TRUE IF REPO IS PRIVATE:
-        useManualList: false, 
-        // IF MANUAL IS TRUE, LIST FILES HERE:
-        manualFiles: ['alicante_north.html', 'alicante_south_luxe.html', 'dynamic_planner.html']
+        username: 'toinevl', 
+        repo: 'alicante-static'
     };
 
-    async function init() {
-        if (CONFIG.useManualList) {
-            renderFiles(CONFIG.manualFiles.map(name => ({ name })));
-        } else {
-            await fetchFromGitHub();
-        }
-    }
-
-    async function fetchFromGitHub() {
+    async function scanRepository() {
         const grid = document.getElementById('file-grid');
-        const errBox = document.getElementById('error-box');
+        const debugList = document.getElementById('debug-file-list');
+        const statusText = document.getElementById('status-text');
 
         try {
             const url = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/`;
             const response = await fetch(url);
             
             if (!response.ok) {
-                throw new Error(`GitHub API returned ${response.status}: ${response.statusText}`);
+                statusText.innerText = "Error: Could not access GitHub.";
+                debugList.innerHTML = `<li>❌ API Error: ${response.status}</li><li>Make sure the repo is PUBLIC.</li>`;
+                return;
             }
 
-            const data = await response.json();
-            const htmlFiles = data.filter(f => f.name.endsWith('.html') && f.name !== 'index.html');
-            renderFiles(htmlFiles);
+            const files = await response.json();
+            debugList.innerHTML = ''; // Clear scanning text
+
+            // Filter for HTML
+            const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html') && f.name !== 'index.html');
+
+            if (htmlFiles.length === 0) {
+                statusText.innerText = "No itinerary files found.";
+                debugList.innerHTML = `<li>Found ${files.length} total files, but zero .html files.</li>`;
+                // List everything found so the user can see what the API sees
+                files.forEach(f => {
+                    debugList.innerHTML += `<li>📁 Found: ${f.name}</li>`;
+                });
+            } else {
+                statusText.innerText = `Found ${htmlFiles.length} itineraries.`;
+                renderCards(htmlFiles);
+                htmlFiles.forEach(f => {
+                    debugList.innerHTML += `<li>✅ Displaying: ${f.name}</li>`;
+                });
+            }
 
         } catch (e) {
-            errBox.classList.remove('hidden');
-            document.getElementById('error-msg').innerText = "Could not fetch files from GitHub.";
-            document.getElementById('debug-details').innerHTML = `
-                Error: ${e.message}<br>
-                Check: Is your repo PUBLIC?<br>
-                Current Config: ${CONFIG.username}/${CONFIG.repo}
-            `;
+            statusText.innerText = "Connection failed.";
+            debugList.innerHTML = `<li>Error: ${e.message}</li>`;
         }
     }
 
-    function renderFiles(files) {
+    function renderCards(files) {
         const grid = document.getElementById('file-grid');
-        grid.innerHTML = '';
+        const images = [
+            "photo-1570530752494-0a30b5015a97",
+            "photo-1523544545175-92e04b96dcef",
+            "photo-1544971587-b842c27f8e14",
+            "photo-1555881400-74d7acaacd8b"
+        ];
 
-        files.forEach(file => {
+        files.forEach((file, i) => {
+            const friendlyName = file.name.replace('.html', '').replace(/_/g, ' ').replace(/-/g, ' ');
             const card = document.createElement('div');
-            card.className = 'hub-card bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 flex flex-col';
-            
-            const friendlyName = file.name
-                .replace('.html', '')
-                .replace(/_/g, ' ')
-                .replace(/-/g, ' ');
-
-            // Use a specific Unsplash image based on the name to make it look professional
-            const imgId = file.name.length % 5; 
-            const images = [
-                "photo-1570530752494-0a30b5015a97",
-                "photo-1523544545175-92e04b96dcef",
-                "photo-1544971587-b842c27f8e14",
-                "photo-1555881400-74d7acaacd8b",
-                "photo-1560935105-905c74266133"
-            ];
-
+            card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1';
             card.innerHTML = `
-                <div class="h-48 overflow-hidden bg-slate-200">
-                    <img src="https://images.unsplash.com/${images[imgId]}?w=600&q=80" class="w-full h-full object-cover">
+                <div class="h-40 bg-slate-200">
+                    <img src="https://images.unsplash.com/${images[i % images.length]}?w=600&q=80" class="w-full h-full object-cover">
                 </div>
-                <div class="p-6 flex-grow">
-                    <h2 class="text-xl font-800 text-slate-900 capitalize mb-2">${friendlyName}</h2>
-                    <p class="text-slate-500 text-sm mb-6">Interactive 3D Holiday Itinerary</p>
-                    <a href="${file.name}" class="block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition">
-                        Open Map
-                    </a>
+                <div class="p-6">
+                    <h2 class="text-xl font-bold text-slate-900 capitalize mb-1">${friendlyName}</h2>
+                    <p class="text-slate-400 text-xs mb-4">Itinerary File: ${file.name}</p>
+                    <a href="${file.name}" class="block w-full bg-blue-600 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition">View Map</a>
                 </div>
             `;
             grid.appendChild(card);
         });
     }
 
-    init();
+    scanRepository();
 </script>
 </body>
 </html>
