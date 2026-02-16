@@ -3,92 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alicante Trip Hub - 3</title>
+    <title>Alicante Trip Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .hub-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .hub-card:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
+    </style>
 </head>
-<body class="p-8 md:p-16 bg-slate-50">
+<body class="p-8 md:p-16">
 
     <div class="max-w-6xl mx-auto">
-        <header class="mb-12">
-            <h1 class="text-4xl font-800 text-slate-900 tracking-tight">Alicante Trip Hub</h1>
-            <p id="status-text" class="text-slate-500 mt-2 italic text-lg text-center md:text-left">Finding your itineraries...</p>
+        <header class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-4xl font-800 text-slate-900 tracking-tight leading-none">Alicante Trip Hub</h1>
+                <p id="status-text" class="text-slate-500 mt-3 italic text-lg">Your holiday itineraries, ready for the road.</p>
+            </div>
+            <button onclick="refreshList()" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-blue-600 transition flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                Force Sync with GitHub
+            </button>
         </header>
 
         <div id="file-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <!-- Cards will appear here -->
+            <!-- Cards appear here -->
         </div>
 
-        <!-- Debugging (Hidden by default, check console if issues persist) -->
-        <div id="debug-info" class="hidden mt-20 p-4 border-t border-slate-200 text-[10px] font-mono text-slate-400"></div>
+        <div id="rate-limit-notice" class="hidden mt-12 p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-700 text-xs flex items-center gap-3">
+            <span class="text-lg">⚠️</span>
+            <span>GitHub rate limit active. Showing cached itineraries from your last successful connection.</span>
+        </div>
     </div>
 
 <script>
-    // --- 1. CONFIGURATION ---
     const CONFIG = {
         username: 'toinevl', 
         repo: 'alicante-static',
-        githubFolder: 'src' // Where the files live on GitHub
+        cacheKey: 'alicante_itinerary_cache',
+        cacheExpiry: 30 * 60 * 1000 // 30 Minutes
     };
 
-    async function scanRepository() {
-        const grid = document.getElementById('file-grid');
+    async function init() {
+        const cachedData = localStorage.getItem(CONFIG.cacheKey);
+        const lastFetch = localStorage.getItem(CONFIG.cacheKey + '_time');
+        const now = Date.now();
+
+        // 1. If we have fresh cache, use it immediately
+        if (cachedData && lastFetch && (now - lastFetch < CONFIG.cacheExpiry)) {
+            console.log("Loading from fresh cache...");
+            renderCards(JSON.parse(cachedData));
+            return;
+        }
+
+        // 2. Otherwise, try to fetch from GitHub
+        await fetchItineraries(cachedData ? JSON.parse(cachedData) : null);
+    }
+
+    async function fetchItineraries(fallbackData) {
         const statusText = document.getElementById('status-text');
-        const debug = document.getElementById('debug-info');
-
-        // We ask GitHub to look in the /src folder
-        const apiUrl = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${CONFIG.githubFolder}`;
-
+        
         try {
-            const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error("Folder not found");
-
-            const files = await response.json();
+            // Try SRC folder first
+            let files = await getGitHubFolder('src');
             
-            // Filter for HTML files
-            const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html') && f.name !== 'index.html');
+            // If empty, try root
+            if (!files || files.length === 0) {
+                files = await getGitHubFolder('');
+            }
 
-            if (htmlFiles.length === 0) {
-                statusText.innerText = "No itineraries found in /src.";
-            } else {
-                statusText.innerText = `Ready to explore ${htmlFiles.length} routes.`;
+            if (files && files.length > 0) {
+                const htmlFiles = files.filter(f => f.name.toLowerCase().endsWith('.html') && f.name !== 'index.html');
+                
+                // Save to cache
+                localStorage.setItem(CONFIG.cacheKey, JSON.stringify(htmlFiles));
+                localStorage.setItem(CONFIG.cacheKey + '_time', Date.now().toString());
+                
                 renderCards(htmlFiles);
+            } else if (fallbackData) {
+                renderCards(fallbackData);
             }
 
         } catch (e) {
-            statusText.innerText = "Error connecting to the Hub.";
             console.error(e);
+            if (fallbackData) renderCards(fallbackData);
         }
+    }
+
+    async function getGitHubFolder(folder) {
+        const url = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${folder}`;
+        const response = await fetch(url);
+        
+        if (response.status === 403) {
+            document.getElementById('rate-limit-notice').classList.remove('hidden');
+            return null;
+        }
+        
+        if (!response.ok) return null;
+        return await response.json();
     }
 
     function renderCards(files) {
         const grid = document.getElementById('file-grid');
-        const images = [
-            "photo-1570530752494-0a30b5015a97",
-            "photo-1523544545175-92e04b96dcef",
-            "photo-1544971587-b842c27f8e14",
-            "photo-1555881400-74d7acaacd8b"
-        ];
+        grid.innerHTML = '';
+        
+        const images = ["photo-1570530752494-0a30b5015a97", "photo-1523544545175-92e04b96dcef", "photo-1544971587-b842c27f8e14", "photo-1555881400-74d7acaacd8b"];
 
         files.forEach((file, i) => {
-            // Friendly Name: "alicante_south.html" -> "Alicante South"
             const friendlyName = file.name.replace('.html', '').replace(/_/g, ' ').replace(/-/g, ' ');
-            
-            // URL LOGIC:
-            // Since Azure flattens the site, we link to just "file.name" (at the root)
-            const webPath = file.name;
-
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex flex-col';
+            card.className = 'hub-card bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 flex flex-col h-full';
             card.innerHTML = `
-                <div class="h-44 bg-slate-200">
-                    <img src="https://images.unsplash.com/${images[i % images.length]}?w=600&q=80" class="w-full h-full object-cover">
+                <div class="h-44 overflow-hidden">
+                    <img src="https://images.unsplash.com/${images[i % images.length]}?w=600&q=80" class="w-full h-full object-cover opacity-90">
                 </div>
-                <div class="p-6 flex-grow flex flex-col">
-                    <h2 class="text-xl font-bold text-slate-900 capitalize mb-1">${friendlyName}</h2>
-                    <p class="text-slate-400 text-[11px] mb-6 uppercase font-bold tracking-widest">Costa Blanca Explorer</p>
-                    <a href="${webPath}" class="mt-auto block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">
-                        Launch Map
+                <div class="p-6 flex flex-col flex-grow">
+                    <h2 class="text-xl font-800 text-slate-900 capitalize mb-1">${friendlyName}</h2>
+                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-6">Interactive 3D Map</p>
+                    <a href="${file.name}" class="mt-auto block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">
+                        Explore Route
                     </a>
                 </div>
             `;
@@ -96,7 +129,12 @@
         });
     }
 
-    scanRepository();
+    function refreshList() {
+        localStorage.removeItem(CONFIG.cacheKey + '_time');
+        location.reload();
+    }
+
+    init();
 </script>
 </body>
 </html>
