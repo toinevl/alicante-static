@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alicante South 3D Explorer</title>
+    
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #020617; margin: 0; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .sidebar {
+            position: absolute; top: 20px; left: 20px; width: 400px;
+            z-index: 100; border-radius: 24px;
+            display: flex; flex-direction: column; max-height: 92vh;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .location-card {
+            cursor: pointer; transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        .location-card:hover { transform: translateY(-2px); background: white; border-color: #e2e8f0; }
+        .active-location { background: white; border-color: #10b981; box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+
+        .marker {
+            width: 14px; height: 14px; background: #10b981;
+            border: 3px solid white; border-radius: 50%;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+            cursor: pointer;
+        }
+
+        #detail-view { display: none; }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="sidebar glass shadow-2xl overflow-hidden">
+    <!-- Header -->
+    <div class="p-6 bg-slate-900 text-white">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-800 tracking-tight">The Southern Route</h1>
+                <p class="text-emerald-400 text-[10px] uppercase tracking-[0.2em] font-bold">Alicante & Vega Baja</p>
+            </div>
+            <button onclick="resetView()" class="p-2 hover:bg-slate-800 rounded-full transition text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main List View -->
+    <div id="list-view" class="overflow-y-auto custom-scrollbar p-4 space-y-3">
+        <!-- Cards Injected Here -->
+    </div>
+
+    <!-- Detail View -->
+    <div id="detail-view" class="overflow-y-auto custom-scrollbar flex-grow fade-in">
+        <button onclick="showList()" class="m-4 flex items-center text-xs font-bold text-emerald-600 uppercase tracking-widest">
+            ← Back to Itinerary
+        </button>
+        <div class="px-4">
+            <img id="detail-img" src="" class="w-full h-52 object-cover rounded-[24px] shadow-lg" onerror="this.src='https://images.unsplash.com/photo-1505761671935-60b3a7427bad?w=800'">
+        </div>
+        <div class="p-6">
+            <h2 id="detail-title" class="text-2xl font-800 text-slate-900 mb-2"></h2>
+            
+            <div class="space-y-6">
+                <section>
+                    <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900 mb-2 uppercase tracking-tighter">
+                        <span class="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg">🍴</span> The Plate
+                    </h3>
+                    <p id="detail-food" class="text-sm text-slate-600 leading-relaxed"></p>
+                </section>
+
+                <section>
+                    <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900 mb-2 uppercase tracking-tighter">
+                        <span class="p-1.5 bg-blue-100 text-blue-600 rounded-lg">📸</span> The View
+                    </h3>
+                    <p id="detail-view-text" class="text-sm text-slate-600 leading-relaxed"></p>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    const destinations = [
+        {
+            day: 1, place: "Alicante: Old Quarter",
+            coords: [-0.4815, 38.3452],
+            img: "https://images.unsplash.com/photo-1570530752494-0a30b5015a97?w=800",
+            food: "Start at 'Calle San Francisco' (Mushroom street) for tapas. Try the 'Montaditos' and local 'Fondillón' wine—a rare, centuries-old sweet wine unique to Alicante.",
+            scenery: "Wander the Barrio de Santa Cruz, the oldest part of the city with colorful houses and flowers. The evening walk along the Postiguet beach is a local must.",
+            pitch: 60, bearing: -20
+        },
+        {
+            day: 2, place: "Tabarca Island",
+            coords: [-0.4700, 38.1650],
+            img: "https://images.unsplash.com/photo-1534067783941-51c9c23ecd9b?w=800",
+            food: "You must eat 'Caldero Tabarquino'—a two-course meal consisting of fresh fish in a savory broth, followed by rice cooked in the same stock.",
+            scenery: "Spain's first marine reserve. The water is crystal clear. Take the catamaran from Santa Pola. The island has a fortified village and a lighthouse with infinite sea views.",
+            pitch: 45, bearing: 0
+        },
+        {
+            day: 3, place: "Elche: The Palm Empire",
+            coords: [-0.6931, 38.2672],
+            img: "https://images.unsplash.com/photo-1596395817234-a82f32386da6?w=800",
+            food: "Try 'Arroz con Costra'—a rich meat rice baked with a thick egg crust. Finish with fresh Elche dates or 'Cantueso' (herbal liqueur).",
+            scenery: "The Palmeral of Elche. It feels like an oasis in the middle of a city. Visit the Imperial Palm in the Huerto del Cura botanical garden.",
+            pitch: 40, bearing: 0
+        },
+        {
+            day: 4, place: "Guardamar Dunes",
+            coords: [-0.6480, 38.0900],
+            img: "https://images.unsplash.com/photo-1506477331477-33d6d8b3dc66?w=800",
+            food: "Famous for 'Langostinos de Guardamar' (King Prawns). Visit the local fish market (Lonja) or dine at a 'Chiringuito' right on the sand dunes.",
+            scenery: "The Alfonso XIII Park. It's 800 hectares of pine and eucalyptus trees planted on sand dunes to stop the town from being buried by sand. Very unique walking trails.",
+            pitch: 50, bearing: 15
+        },
+        {
+            day: 5, place: "Torrevieja: Pink Lake",
+            coords: [-0.7000, 38.0000],
+            img: "https://images.unsplash.com/photo-1510252514338-e69d957d5985?w=800",
+            food: "Try 'Pescado a la Sal' (Fish baked in salt). Torrevieja is one of the world's largest salt producers, and the salt-crust seals in all the moisture of the fish.",
+            scenery: "The 'Laguna Rosa'. Due to special bacteria, the lake turns a vibrant bubblegum pink. It’s a surreal landscape, perfect for photography, especially at sunset.",
+            pitch: 55, bearing: -10
+        },
+        {
+            day: 6, place: "Orihuela: Gothic Heart",
+            coords: [-0.9400, 38.0850],
+            img: "https://images.unsplash.com/photo-1563290231-69273f55447b?w=800",
+            food: "Orihuela is famous for its convent sweets. Look for 'Chatos' or 'Polvorones'. The area is the 'orchard of Europe,' so the vegetable dishes (menestras) are world-class.",
+            scenery: "The historic capital of the region. Visit the Cathedral and the Diocesan Museum (which holds a Velázquez). The mountain backdrop makes the Gothic architecture pop.",
+            pitch: 65, bearing: -40
+        },
+        {
+            day: 7, place: "Mil Palmeras / Torre",
+            coords: [-0.7550, 37.8650],
+            img: "https://images.unsplash.com/photo-1520116468816-95b69fac0973?w=800",
+            food: "Farewell dinner at 'Torre de la Horadada' marina. Mediterranean fusion seafood is the trend here. Try the 'Arroz Negro' (Squid ink rice).",
+            scenery: "The 16th-century watchtower overlooking the white sand beaches. The coastal walk between Mil Palmeras and Campoamor offers stunning low-cliff views.",
+            pitch: 45, bearing: 20
+        }
+    ];
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/bright',
+        center: [-0.65, 38.1],
+        zoom: 9.5,
+        pitch: 45,
+        antialias: true
+    });
+
+    function showDetail(dest) {
+        document.getElementById('list-view').style.display = 'none';
+        document.getElementById('detail-view').style.display = 'block';
+        
+        document.getElementById('detail-img').src = dest.img;
+        document.getElementById('detail-title').innerText = dest.place;
+        document.getElementById('detail-food').innerText = dest.food;
+        document.getElementById('detail-view-text').innerText = dest.scenery;
+
+        map.flyTo({
+            center: dest.coords,
+            zoom: 14.5,
+            pitch: dest.pitch,
+            bearing: dest.bearing,
+            speed: 1.0,
+            essential: true
+        });
+    }
+
+    function showList() {
+        document.getElementById('list-view').style.display = 'block';
+        document.getElementById('detail-view').style.display = 'none';
+        resetView();
+    }
+
+    function resetView() {
+        map.flyTo({ center: [-0.65, 38.1], zoom: 9.5, pitch: 45, bearing: 0, essential: true });
+    }
+
+    map.on('load', () => {
+        destinations.forEach((dest) => {
+            const card = document.createElement('div');
+            card.className = 'location-card p-4 rounded-2xl flex gap-4 items-center';
+            card.innerHTML = `
+                <div class="relative">
+                    <img src="${dest.img}" class="w-16 h-16 rounded-xl object-cover shadow-sm" onerror="this.src='https://images.unsplash.com/photo-1505761671935-60b3a7427bad?w=200'">
+                    <span class="absolute -top-2 -left-2 bg-emerald-600 text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">${dest.day}</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm leading-tight">${dest.place}</h3>
+                    <p class="text-[11px] text-slate-400 mt-1 font-medium tracking-tight">Explore Food & Sights →</p>
+                </div>
+            `;
+            card.onclick = () => showDetail(dest);
+            document.getElementById('list-view').appendChild(card);
+
+            const el = document.createElement('div');
+            el.className = 'marker';
+            new maplibregl.Marker(el)
+                .setLngLat(dest.coords)
+                .setPopup(new maplibregl.Popup({ offset: 15 }).setHTML(`<h4 class="font-bold text-slate-800">${dest.place}</h4>`))
+                .addTo(map);
+        });
+
+        map.addLayer({
+            'id': '3d-buildings',
+            'source': 'openmaptiles',
+            'source-layer': 'building',
+            'type': 'fill-extrusion',
+            'minzoom': 13,
+            'paint': {
+                'fill-extrusion-color': '#fff',
+                'fill-extrusion-height': ['get', 'render_height'],
+                'fill-extrusion-opacity': 0.7
+            }
+        });
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+</script>
+
+</body>
+</html>
