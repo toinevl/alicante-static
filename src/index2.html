@@ -103,31 +103,49 @@
         return await response.json();
     }
 
-    function renderCards(files) {
-        const grid = document.getElementById('file-grid');
-        grid.innerHTML = '';
-        
-        const images = ["photo-1570530752494-0a30b5015a97", "photo-1523544545175-92e04b96dcef", "photo-1544971587-b842c27f8e14", "photo-1555881400-74d7acaacd8b"];
+function renderCards(files) {
+    const grid = document.getElementById('file-grid');
+    grid.innerHTML = '';
+    
+    // Fallback image in case Unsplash fails
+    const fallbackImg = "https://images.unsplash.com/photo-1505761671935-60b3a7427bad?w=600&q=80";
 
-        files.forEach((file, i) => {
-            const friendlyName = file.name.replace('.html', '').replace(/_/g, ' ').replace(/-/g, ' ');
-            const card = document.createElement('div');
-            card.className = 'hub-card bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 flex flex-col h-full';
-            card.innerHTML = `
-                <div class="h-44 overflow-hidden">
-                    <img src="https://images.unsplash.com/${images[i % images.length]}?w=600&q=80" class="w-full h-full object-cover opacity-90">
-                </div>
-                <div class="p-6 flex flex-col flex-grow">
-                    <h2 class="text-xl font-800 text-slate-900 capitalize mb-1">${friendlyName}</h2>
-                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-6">Interactive 3D Map</p>
-                    <a href="${file.name}" class="mt-auto block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">
-                        Explore Route
-                    </a>
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-    }
+    files.forEach((file, i) => {
+        const name = file.name.toLowerCase();
+        const friendlyName = file.name.replace('.html', '').replace(/_/g, ' ').replace(/-/g, ' ');
+        
+        // Match specific images to your itinerary types
+        let imageUrl = "";
+        if (name.includes('luxe')) {
+            imageUrl = "https://images.unsplash.com/photo-1570530752494-0a30b5015a97?w=600&q=80"; // Luxury street
+        } else if (name.includes('dynamic')) {
+            imageUrl = "https://images.unsplash.com/photo-1454165833767-027ffea9e778?w=600&q=80"; // Planning/Tech
+        } else if (name.includes('south')) {
+            imageUrl = "https://images.unsplash.com/photo-1523544545175-92e04b96dcef?w=600&q=80"; // Coast/South
+        } else {
+            imageUrl = `https://images.unsplash.com/photo-1544971587-b842c27f8e14?w=600&q=80`; // Default Spain
+        }
+
+        const card = document.createElement('div');
+        card.className = 'hub-card bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 flex flex-col h-full';
+        card.innerHTML = `
+            <div class="h-44 overflow-hidden bg-slate-100">
+                <img src="${imageUrl}" 
+                     class="w-full h-full object-cover" 
+                     onerror="this.onerror=null;this.src='${fallbackImg}';"
+                     alt="${friendlyName}">
+            </div>
+            <div class="p-6 flex flex-col flex-grow">
+                <h2 class="text-xl font-800 text-slate-900 capitalize mb-1">${friendlyName}</h2>
+                <p class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-6">Interactive 3D Map</p>
+                <a href="${file.name}" class="mt-auto block w-full bg-slate-900 text-white text-center py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition shadow-lg shadow-slate-200">
+                    Explore Route
+                </a>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
 
     function refreshList() {
         localStorage.removeItem(CONFIG.cacheKey + '_time');
