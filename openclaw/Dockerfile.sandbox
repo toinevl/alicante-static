@@ -1,0 +1,37 @@
+# OpenClaw Agent Sandbox Image
+# Each agent session runs in a fresh container built from this image.
+# The gateway on the host spawns and destroys these containers automatically.
+#
+# Build:
+#   docker build -t openclaw-sandbox:latest -f Dockerfile.sandbox .
+#
+# You do NOT need to run this manually — setup.sh builds it for you.
+
+FROM node:24-bookworm-slim
+
+LABEL org.opencontainers.image.description="OpenClaw agent sandbox — isolated execution environment"
+
+# Install common tools agents may need
+RUN apt-get update -qq && apt-get install -y -qq \
+    curl \
+    wget \
+    git \
+    jq \
+    python3 \
+    python3-pip \
+    unzip \
+    zip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root agent user
+RUN groupadd --gid 1001 agent && \
+    useradd --uid 1001 --gid agent --shell /bin/bash --create-home agent
+
+# Workspace directory (mounted from host at ~/openclaw/workspace)
+RUN mkdir -p /workspace && chown agent:agent /workspace
+
+WORKDIR /workspace
+USER agent
+
+# Default entrypoint — the gateway overrides CMD at runtime
+CMD ["/bin/bash"]

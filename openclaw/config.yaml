@@ -1,0 +1,98 @@
+# OpenClaw Configuration
+# Location: ~/.openclaw/config.yaml
+# Reference: https://docs.openclaw.ai/configuration
+#
+# After editing, restart the gateway:
+#   systemctl --user restart openclaw-gateway
+
+###############################################################################
+# AI Model
+###############################################################################
+model:
+  # Provider: openai | anthropic | gemini | groq | ollama | ...
+  provider: anthropic
+
+  # Model name as recognised by the provider
+  name: claude-sonnet-4-6
+
+  # Your API key (or set via environment variable OPENCLAW_API_KEY)
+  # api_key: "sk-ant-..."
+
+###############################################################################
+# Gateway
+###############################################################################
+gateway:
+  port: 18789
+  host: "127.0.0.1"   # Only listen locally — never expose to the internet
+
+###############################################################################
+# Agents / Sandbox (Container-per-Agent)
+###############################################################################
+agents:
+  defaults:
+    # Run every agent's tool execution (shell, file I/O, browser) inside its
+    # own isolated Docker container. The gateway itself stays on the host OS.
+    sandbox:
+      enabled: true
+      docker:
+        # Pre-built sandbox image. Build with:
+        #   docker build -t openclaw-sandbox:latest -f Dockerfile.sandbox .
+        image: "openclaw-sandbox:latest"
+
+        # Pull policy: never | always | if-not-present
+        pull: "if-not-present"
+
+        # Resource limits per container
+        cpus: "1.0"
+        memory: "512m"
+
+        # Mount the shared workspace into the container
+        volumes:
+          - "~/openclaw/workspace:/workspace"
+
+        # Network mode: none (fully isolated) | bridge (internet access)
+        network: "bridge"
+
+        # Remove container automatically when the session ends
+        auto_remove: true
+
+    # Ask for explicit approval before running shell or write commands
+    exec:
+      ask: "on"
+
+###############################################################################
+# Channels
+# Uncomment and fill in the channel(s) you want to use.
+###############################################################################
+channels:
+  # telegram:
+  #   token: "your-telegram-bot-token"
+  #   allowed_users:
+  #     - your_telegram_username
+
+  # discord:
+  #   token: "your-discord-bot-token"
+  #   guild_id: "your-guild-id"
+
+  # slack:
+  #   bot_token: "xoxb-..."
+  #   app_token: "xapp-..."
+
+###############################################################################
+# Security
+###############################################################################
+security:
+  # Require DM pairing before a new user can control agents
+  pairing:
+    required: true
+
+  # Allowlist of messaging platform usernames allowed to pair
+  # allowlist:
+  #   - your_username
+
+###############################################################################
+# Logging
+###############################################################################
+logging:
+  level: info   # debug | info | warn | error
+  file: "~/.openclaw/gateway.log"
